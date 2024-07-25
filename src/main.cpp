@@ -46,19 +46,19 @@ FsFile dataFile;
 
 //const int chipSelect = 15;
 
-bool rtcc_adjust = true;
+bool rtcc_adjust = false;
 
-const char* fileName = "datalog.csv";                    // Nome do arquivo de texto do datalog
+const char* fileName = "datalogFieldCapacity.csv";                    // Nome do arquivo de texto do datalog
 long long lastMeasument = 0;
-boolean debug = true;
+boolean debug = false;
 char datetime [25] = "";
 char line[500];
 float Weight;
 
 //---------------------------------------------------------------------
 // HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = 17; // Definir quando for utilizar
-const int LOADCELL_SCK_PIN = 16; // Definir quando for utilizar
+const int LOADCELL_DOUT_PIN = A0; // Definir quando for utilizar
+const int LOADCELL_SCK_PIN = D0; // Definir quando for utilizar
 
 RTC_DS1307 rtc;
 HX711 loadcell;
@@ -101,7 +101,7 @@ void loop() {
 
     sprintf(datetime, "%04d/%02d/%02d;%02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
     String Weight_str = (String)Weight;
-    sprintf(line, "%s;%02d; \n",datetime, Weight);                                                
+    sprintf(line, "%s;%s; \n",datetime, Weight_str);                                                
                 
     if (debug) Serial.print(line);
 
@@ -136,7 +136,7 @@ void headers()
       return;
     }
 
-    dataFile.println("Data;Hora;Id;Bateria[V];Temp_placa[C];Temp_solo[C];Const_Diel;Condutiv[uS/cm];Umidade[m3/m3*100];Salinidade[uS/cm]");  // Escreva o índice no arquivo
+    dataFile.println("Data;Hora;Peso");  // Escreva o índice no arquivo
     if (debug) Serial.println("Arquivo criado");      
 
     dataFile.close();  // Fecha o arquivo
@@ -154,7 +154,7 @@ void rtcc_config()
   
   headers();     // obtêm a identificação da ultima medição e adiciona um.
 
-  sprintf(datetime, "%04d/%02d/%02d;%02d:%02d:%02d;", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+  sprintf(datetime, "%04d/%02d/%02d;%02d:%02d:%02d", now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
   Serial.print(datetime);
 
   String Weight_str = (String)Weight;
