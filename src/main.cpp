@@ -2,11 +2,12 @@
 #include "SdFat.h"
 #include "RTClib.h"
 #include "HX711.h"
+#include "EEPROM.h"
 
 
 // SD_FAT_TYPE = 0 for SdFat/File as defined in SdFatConfig.h,
 // 1 for FAT16/FAT32, 2 for exFAT, 3 for FAT16/FAT32 and exFAT.
-#define SD_FAT_TYPE 1
+#define SD_FAT_TYPE 2
 
 // SDCARD_SS_PIN is defined for the built-in SD on some boards.
 #ifndef SDCARD_SS_PIN 
@@ -17,13 +18,13 @@ const uint8_t SD_CS_PIN = SDCARD_SS_PIN;
 #endif  // SDCARD_SS_PIN
 
 // Try max SPI clock for an SD. Reduce SPI_CLOCK if errors occur.
-#define SPI_CLOCK SD_SCK_MHZ(50)
+#define SPI_CLOCK SD_SCK_MHZ(20)
 
 // Try to select the best SD card configuration.
 #if HAS_SDIO_CLASS
 #define SD_CONFIG SdioConfig(FIFO_SDIO)
 #elif  ENABLE_DEDICATED_SPI
-#define SD_CONFIG SdSpiConfig(SS, DEDICATED_SPI, SPI_CLOCK)
+#define SD_CONFIG SdSpiConfig(SD_CS_PIN, DEDICATED_SPI, SPI_CLOCK)
 #else  // HAS_SDIO_CLASS
 #define SD_CONFIG SdSpiConfig(SD_CS_PIN, SHARED_SPI, SPI_CLOCK)
 #endif  // HAS_SDIO_CLASS
@@ -47,18 +48,22 @@ FsFile dataFile;
 //const int chipSelect = 15;
 
 bool rtcc_adjust = false;
+boolean debug = false;
 
 const char* fileName = "datalogFieldCapacity.csv";                    // Nome do arquivo de texto do datalog
 long long lastMeasument = 0;
-boolean debug = false;
 char datetime [25] = "";
 char line[500];
 float Weight;
 
+float BufferEEPROM[20]; // Buffer de todas as variaveis float da EEPROM
+float EEPROMvalueScale;
+float EEPROMvalueOffset;
+
 //---------------------------------------------------------------------
 // HX711 circuit wiring
-const int LOADCELL_DOUT_PIN = A0; // Definir quando for utilizar
-const int LOADCELL_SCK_PIN = D0; // Definir quando for utilizar
+const int LOADCELL_DOUT_PIN = 32; // Definir quando for utilizar
+const int LOADCELL_SCK_PIN = 33; // Definir quando for utilizar
 
 RTC_DS1307 rtc;
 HX711 loadcell;
@@ -68,20 +73,26 @@ void headers();
 void rtcc_config();
 void sd_card_init();
 void rtcc_test();
+void eeprom_init();
 
 void setup() {
   Serial.begin(9600); // porta USB or Xbee      
   if (debug) Serial.println("start");  
   // CARTÃO SD
   sd_card_init();
+
   
   // RTCC and SD start:
   rtc.begin();
   // gravar pela primeira vez com esta função descomentada, para ajustar data e hora a partir do Windows. Verificar dados gravados no cartão. Em seguida, regravar com a função comentada.
   if (rtcc_adjust) rtcc_config(); 
   if (debug) rtcc_test();
+
   //Inicializa o HX711
   loadcell.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  // Conectando a rede anteriormente salva na EEPROM
+  EEPROM.begin(128);
+  eeprom_init(); // Carrega os valores de scale e offset das células de carga
 
   lastMeasument = millis();
 }
@@ -91,11 +102,9 @@ void loop() {
   {
     lastMeasument = millis();
     Weight = pesagem();
-
     // RTCC             
     DateTime now = rtc.now();             
     
-    sd_card_init();
     
     headers();    
 
@@ -120,7 +129,7 @@ void loop() {
 }
 
 float pesagem() {
-  return (9.378 * (loadcell.get_units(10))-343.35);
+  return (loadcell.get_units(10));
 }
 
 void headers() 
@@ -191,4 +200,24 @@ void sd_card_init()
     if (debug) SD.initErrorHalt(&Serial);
     // don't do anything more:  
   }
+}
+// Retorna valor que está contido na posição de memória da EEPROM
+float readFloatFromEEPROM(int address) {
+  float value;
+  EEPROM.get(address, value);
+  return value;
+}
+
+void eeprom_init() {
+  BufferEEPROM[0] = readFloatFromEEPROM(0);
+  BufferEEPROM[1] = readFloatFromEEPROM(4);
+
+  EEPROMvalueScale = BufferEEPROM[0];
+  EEPROMvalueOffset = BufferEEPROM[1];
+
+  if(debug)Serial.println(EEPROMvalueScale);
+  if(debug)Serial.println(EEPROMvalueOffset);
+
+  loadcell.set_scale(EEPROMvalueScale);            
+  loadcell.set_offset(EEPROMvalueOffset);	
 }
